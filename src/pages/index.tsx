@@ -1,6 +1,7 @@
 import { Button, Box } from '@chakra-ui/react';
 import { useMemo } from 'react';
 import { useInfiniteQuery } from 'react-query';
+import Head from 'next/head'
 
 import { Header } from '../components/Header';
 import { CardList } from '../components/CardList';
@@ -8,14 +9,32 @@ import { api } from '../services/api';
 import { Loading } from '../components/Loading';
 import { Error } from '../components/Error';
 
-export default function Home(): JSX.Element {
-  const fetchImages = async ({ pageParam = null }) => {
-    const response = api.get(`api/images?after=${pageParam}`)
-    console.log(response);
-  }
+interface Card {
+  title: string;
+  description: string;
+  url: string;
+  ts: number;
+  id: string;
+}
+interface fetchImagesResponse {
+  data: Card[];
+  after: string | null;
+}
 
-  const getNextPageParam = async (lastPage, pages) => {
-    lastPage.nextCursor
+export default function Home(): JSX.Element {
+
+  const fetchImages = async ({ pageParam = null }): Promise<fetchImagesResponse> => {
+    if (pageParam) {
+      const { data } = await api.get(`/api/images`, {
+        params: {
+          after: pageParam,
+        },
+      });
+
+      return data
+    }
+    const { data } = await api.get(`/api/images`);
+    return data;
   }
 
   const {
@@ -26,28 +45,49 @@ export default function Home(): JSX.Element {
     fetchNextPage,
     hasNextPage,
   } = useInfiniteQuery(
-    'images',
-    fetchImages,
-    {
-     getNextPageParam: (lastPage, pages) => lastPage,
-   }
-  );
+    'images', fetchImages, {
+    getNextPageParam: lastPage => lastPage.after ?? null,
+  });
 
   const formattedData = useMemo(() => {
-    // TODO FORMAT AND FLAT DATA ARRAY
+    let formatData = [] as Card[];
+    const dataPages = data?.pages;
+
+    dataPages?.map(page => {
+      formatData = [...formatData, ...page.data];
+      return;
+    })
+
+    return formatData;
   }, [data]);
 
-  // TODO RENDER LOADING SCREEN
+  if (isLoading) {
+    return <Loading />
+  }
 
-  // TODO RENDER ERROR SCREEN
+  if (isError) {
+    return <Error />
+  }
 
   return (
     <>
+
+      <Head>
+        <title>Upfi</title>
+      </Head>
+
       <Header />
 
-      <Box maxW={1120} px={20} mx="auto" my={20}>
+      <Box maxW={1120} px={['0.5rem', 20]} mx="auto" my={20}>
         <CardList cards={formattedData} />
-        {/* TODO RENDER LOAD MORE BUTTON IF DATA HAS NEXT PAGE */}
+        {hasNextPage &&
+          <Button
+            mt="1rem"
+            onClick={() => fetchNextPage()}
+          >
+            {isFetchingNextPage ? 'Carregando...' : 'Carregar mais'}
+          </Button>
+        }
       </Box>
     </>
   );
